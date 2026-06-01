@@ -1,0 +1,292 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RolUsuario {
+  administrador
+  gerente
+  compras
+  almacen
+}
+
+enum EstadoGenerico {
+  activo
+  inactivo
+}
+
+enum MetodoImputacion {
+  directo
+  indirecto
+}
+
+enum CapacidadAlmacenamiento {
+  almacenable
+  no_almacenable
+}
+
+enum CategoriaABC {
+  A
+  B
+  C
+}
+
+enum EstadoOrdenCompra {
+  pendiente
+  en_revision
+  aprobada
+  enviada
+  recibida
+  rechazada
+  observada
+}
+
+enum MotivoSalida {
+  produccion
+  merma
+  devolucion
+  venta
+  transferencia
+}
+
+enum SistemaReposicion {
+  nivel
+  cobertura
+  mixto
+}
+
+model Usuario {
+  idUsuario      Int             @id @default(autoincrement()) @map("id_usuario")
+  nombres        String
+  apellidos      String
+  usuario        String          @unique
+  password       String
+  rol            RolUsuario
+  estado         EstadoGenerico  @default(activo)
+  fechaCreacion  DateTime        @default(now()) @map("fecha_creacion")
+  ordenes        OrdenCompra[]
+  entradas       Entrada[]
+  salidas        Salida[]
+  logs           LogAuditoria[]
+
+  @@map("USUARIO")
+}
+
+model Producto {
+  idProducto                 Int                       @id @default(autoincrement()) @map("id_producto")
+  codigo                     String                    @unique
+  nombre                     String
+  descripcion                String?
+  unidadMedida               String                    @map("unidad_medida")
+  categoria                  String
+  tipoExistenciaPgc          Int                       @map("tipo_existencia_pgc")
+  metodoImputacion           MetodoImputacion          @map("metodo_imputacion")
+  capacidadAlmacenamiento    CapacidadAlmacenamiento   @map("capacidad_almacenamiento")
+  sistemaReposicion          SistemaReposicion         @default(nivel) @map("sistema_reposicion")
+  estado                     EstadoGenerico            @default(activo)
+  inventarios                Inventario[]
+  clasificaciones            ClasificacionABC[]
+  proveedorProductos         ProveedorProducto[]
+  detallesOrden              DetalleOrdenCompra[]
+  detallesEntrada            DetalleEntrada[]
+  detallesSalida             DetalleSalida[]
+
+  @@map("PRODUCTO")
+}
+
+model Proveedor {
+  idProveedor          Int                 @id @default(autoincrement()) @map("id_proveedor")
+  nombre               String
+  ruc                  String              @unique
+  direccion            String
+  telefono             String
+  email                String
+  leadTimePromedio     Int                 @map("lead_time_promedio")
+  calificacion         Float               @default(5)
+  estado               EstadoGenerico      @default(activo)
+  retrasosRegistrados  Int                 @default(0) @map("retrasos_registrados")
+  pedidosRegistrados   Int                 @default(0) @map("pedidos_registrados")
+  ordenes              OrdenCompra[]
+  proveedorProductos   ProveedorProducto[]
+
+  @@map("PROVEEDOR")
+}
+
+model ProveedorProducto {
+  idProveedor    Int       @map("id_proveedor")
+  idProducto     Int       @map("id_producto")
+  precioUnitario Decimal   @db.Decimal(12, 2) @map("precio_unitario")
+  proveedor      Proveedor @relation(fields: [idProveedor], references: [idProveedor])
+  producto       Producto  @relation(fields: [idProducto], references: [idProducto])
+
+  @@id([idProveedor, idProducto])
+  @@map("PROVEEDOR_PRODUCTO")
+}
+
+model Almacen {
+  idAlmacen      Int         @id @default(autoincrement()) @map("id_almacen")
+  nombre         String
+  ubicacion      String
+  descripcion    String?
+  estado         EstadoGenerico @default(activo)
+  inventarios    Inventario[]
+  entradas       Entrada[]
+  detallesEntrada DetalleEntrada[]
+
+  @@map("ALMACEN")
+}
+
+model Inventario {
+  idInventario              Int       @id @default(autoincrement()) @map("id_inventario")
+  idProducto                Int       @map("id_producto")
+  idAlmacen                 Int       @map("id_almacen")
+  stockActual               Decimal   @db.Decimal(14, 3) @default(0) @map("stock_actual")
+  stockMinimo               Decimal   @db.Decimal(14, 3) @default(0) @map("stock_minimo")
+  stockMaximo               Decimal   @db.Decimal(14, 3) @default(0) @map("stock_maximo")
+  stockSeguridad            Decimal   @db.Decimal(14, 3) @default(0) @map("stock_seguridad")
+  puntoPedido               Decimal   @db.Decimal(14, 3) @default(0) @map("punto_pedido")
+  vop                       Decimal   @db.Decimal(14, 3) @default(0)
+  pasillo                   String?
+  nivel                     String?
+  fechaUltimaActualizacion  DateTime  @default(now()) @updatedAt @map("fecha_ultima_actualizacion")
+  producto                  Producto  @relation(fields: [idProducto], references: [idProducto])
+  almacen                   Almacen   @relation(fields: [idAlmacen], references: [idAlmacen])
+
+  @@unique([idProducto, idAlmacen])
+  @@map("INVENTARIO")
+}
+
+model ParametroInventario {
+  idParametro           Int      @id @default(autoincrement()) @map("id_parametro")
+  nivelServicio         Int      @default(95) @map("nivel_servicio")
+  valorZ                Decimal  @db.Decimal(6, 3) @default(1.645) @map("valor_z")
+  costoPedido           Decimal  @db.Decimal(12, 2) @default(0) @map("costo_pedido")
+  costoAlmacenamiento   Decimal  @db.Decimal(12, 2) @default(0) @map("costo_almacenamiento")
+  umbralMinimoOc        Decimal  @db.Decimal(12, 2) @default(0) @map("umbral_minimo_oc")
+  diasLaborales         Int      @default(365) @map("dias_laborales")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("PARAMETRO_INVENTARIO")
+}
+
+model ClasificacionABC {
+  idClasificacion         Int          @id @default(autoincrement()) @map("id_clasificacion")
+  idProducto              Int          @map("id_producto")
+  categoria               CategoriaABC
+  valorAnual              Decimal      @db.Decimal(14, 2) @map("valor_anual")
+  porcentajeIndividual    Decimal      @db.Decimal(8, 4) @map("porcentaje_individual")
+  porcentajeAcumulado     Decimal      @db.Decimal(8, 4) @map("porcentaje_acumulado")
+  lote                    String
+  fechaActualizacion      DateTime     @default(now()) @map("fecha_actualizacion")
+  producto                Producto     @relation(fields: [idProducto], references: [idProducto])
+
+  @@map("CLASIFICACION_ABC")
+}
+
+model OrdenCompra {
+  idOrdenCompra           Int               @id @default(autoincrement()) @map("id_orden_compra")
+  nroOrden                String            @unique @map("nro_orden")
+  idProveedor             Int               @map("id_proveedor")
+  idUsuario               Int               @map("id_usuario")
+  fechaOrden              DateTime          @default(now()) @map("fecha_orden")
+  fechaEntregaEstimada    DateTime          @map("fecha_entrega_estimada")
+  nroComprobante          String?           @map("nro_comprobante")
+  estado                  EstadoOrdenCompra @default(pendiente)
+  observaciones           String?
+  total                   Decimal           @db.Decimal(14, 2)
+  proveedor               Proveedor         @relation(fields: [idProveedor], references: [idProveedor])
+  usuario                 Usuario           @relation(fields: [idUsuario], references: [idUsuario])
+  detalles                DetalleOrdenCompra[]
+  entradas                Entrada[]
+
+  @@map("ORDEN_COMPRA")
+}
+
+model DetalleOrdenCompra {
+  idDetalleOc           Int         @id @default(autoincrement()) @map("id_detalle_oc")
+  idOrdenCompra         Int         @map("id_orden_compra")
+  idProducto            Int         @map("id_producto")
+  cantidadSolicitada    Decimal     @db.Decimal(14, 3) @map("cantidad_solicitada")
+  precioUnitario        Decimal     @db.Decimal(12, 2) @map("precio_unitario")
+  subtotal              Decimal     @db.Decimal(14, 2)
+  ordenCompra           OrdenCompra @relation(fields: [idOrdenCompra], references: [idOrdenCompra])
+  producto              Producto    @relation(fields: [idProducto], references: [idProducto])
+
+  @@map("DETALLE_ORDEN_COMPRA")
+}
+
+model Entrada {
+  idEntrada           Int        @id @default(autoincrement()) @map("id_entrada")
+  idOrdenCompra       Int        @map("id_orden_compra")
+  idAlmacen           Int        @map("id_almacen")
+  idUsuario           Int        @map("id_usuario")
+  fechaEntrada        DateTime   @default(now()) @map("fecha_entrada")
+  nroComprobante      String     @map("nro_comprobante")
+  observacion         String?
+  ordenCompra         OrdenCompra @relation(fields: [idOrdenCompra], references: [idOrdenCompra])
+  almacen             Almacen    @relation(fields: [idAlmacen], references: [idAlmacen])
+  usuario             Usuario    @relation(fields: [idUsuario], references: [idUsuario])
+  detalles            DetalleEntrada[]
+
+  @@map("ENTRADA")
+}
+
+model DetalleEntrada {
+  idDetalleEntrada   Int        @id @default(autoincrement()) @map("id_detalle_entrada")
+  idEntrada          Int        @map("id_entrada")
+  idProducto         Int        @map("id_producto")
+  idAlmacen          Int        @map("id_almacen")
+  cantidadRecibida   Decimal    @db.Decimal(14, 3) @map("cantidad_recibida")
+  costoUnitario      Decimal    @db.Decimal(12, 2) @map("costo_unitario")
+  fechaVencimiento   DateTime?  @map("fecha_vencimiento")
+  entrada            Entrada    @relation(fields: [idEntrada], references: [idEntrada])
+  producto           Producto   @relation(fields: [idProducto], references: [idProducto])
+  almacen            Almacen    @relation(fields: [idAlmacen], references: [idAlmacen])
+
+  @@map("DETALLE_ENTRADA")
+}
+
+model Salida {
+  idSalida           Int         @id @default(autoincrement()) @map("id_salida")
+  fechaSalida        DateTime    @default(now()) @map("fecha_salida")
+  tipoComprobante    String      @map("tipo_comprobante")
+  idUsuario          Int         @map("id_usuario")
+  observacion        String?
+  usuario            Usuario     @relation(fields: [idUsuario], references: [idUsuario])
+  detalles           DetalleSalida[]
+
+  @@map("SALIDA")
+}
+
+model DetalleSalida {
+  idDetalleSalida   Int          @id @default(autoincrement()) @map("id_detalle_salida")
+  idSalida          Int          @map("id_salida")
+  idProducto        Int          @map("id_producto")
+  cantidad          Decimal      @db.Decimal(14, 3)
+  costoUnitario     Decimal      @db.Decimal(12, 2) @map("costo_unitario")
+  motivo            MotivoSalida
+  destino           String
+  salida            Salida       @relation(fields: [idSalida], references: [idSalida])
+  producto          Producto     @relation(fields: [idProducto], references: [idProducto])
+
+  @@map("DETALLE_SALIDA")
+}
+
+model LogAuditoria {
+  idLog               Int      @id @default(autoincrement()) @map("id_log")
+  idUsuario           Int      @map("id_usuario")
+  accion              String
+  tablaAfectada       String   @map("tabla_afectada")
+  idRegistroAfectado  String   @map("id_registro_afectado")
+  valorAnterior       Json?    @map("valor_anterior")
+  valorNuevo          Json?    @map("valor_nuevo")
+  ipOrigen            String   @map("ip_origen")
+  fechaHora           DateTime @default(now()) @map("fecha_hora")
+  usuario             Usuario  @relation(fields: [idUsuario], references: [idUsuario])
+
+  @@map("LOG_AUDITORIA")
+}
